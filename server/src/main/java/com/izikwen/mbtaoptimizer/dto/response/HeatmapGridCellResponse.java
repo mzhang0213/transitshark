@@ -8,6 +8,10 @@ public class HeatmapGridCellResponse {
     private double maxLng;
     private double intensity;
 
+    public HeatmapGridCellResponse() {
+        super();
+    }
+
     public HeatmapGridCellResponse(double minLat, double minLng, double maxLat, double maxLng, double intensity) {
         this.minLat = minLat;
         this.minLng = minLng;

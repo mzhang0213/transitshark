@@ -57,9 +57,108 @@ values
 ('Mattapan', 'Mattapan', 'Mattapan Line', 'SUBWAY', 'DA291C')
 on conflict do nothing;
 
+--Downtown
 insert into heatmap_cells (area_code, lat, lng, intensity, hour_of_day, metric_type)
 values
-('downtown', 42.3555, -71.0620, 0.92, 13, 'DEMAND'),
-('downtown', 42.3548, -71.0614, 0.76, 13, 'DEMAND'),
-('downtown', 42.3560, -71.0630, 0.68, 13, 'DEMAND')
+('downtown', 42.3555, -71.0620, 0.95, 08, 'DEMAND'),
+('downtown', 42.3555, -71.0620, 0.98, 17, 'DEMAND'),
+('downtown', 42.3555, -71.0620, 0.25, 22, 'DEMAND')
 on conflict do nothing;
+
+-- North End
+insert into heatmap_cells (area_code, lat, lng, intensity, hour_of_day, metric_type)
+values
+('northend', 42.3647, -71.0542, 0.30, 09, 'DEMAND'),
+('northend', 42.3647, -71.0542, 0.92, 19, 'DEMAND'),
+('northend', 42.3647, -71.0542, 0.85, 21, 'DEMAND')
+on conflict do nothing;
+
+-- Back Bay
+insert into heatmap_cells (area_code, lat, lng, intensity, hour_of_day, metric_type)
+values
+('backbay', 42.3484, -71.0825, 0.88, 12, 'DEMAND'),
+('backbay', 42.3484, -71.0825, 0.90, 18, 'DEMAND'),
+('backbay', 42.3484, -71.0825, 0.45, 10, 'DEMAND')
+on conflict do nothing;
+
+-- Seaport
+insert into heatmap_cells (area_code, lat, lng, intensity, hour_of_day, metric_type)
+values
+('seaport', 42.3490, -71.0400, 0.85, 12, 'DEMAND'),
+('seaport', 42.3490, -71.0400, 0.95, 20, 'DEMAND'),
+('seaport', 42.3490, -71.0400, 0.15, 07, 'DEMAND')
+on conflict do nothing;
+
+-- Fenway
+insert into heatmap_cells (area_code, lat, lng, intensity, hour_of_day, metric_type)
+values
+('fenway', 42.3467, -71.0972, 0.99, 19, 'DEMAND'),
+('fenway', 42.3467, -71.0972, 0.60, 08, 'DEMAND'),
+('fenway', 42.3467, -71.0972, 0.30, 23, 'DEMAND')
+on conflict do nothing;
+
+-- Charlestown
+insert into heatmap_cells (area_code, lat, lng, intensity, hour_of_day, metric_type)
+values
+('charlestown', 42.3762, -71.0608, 0.90, 07, 'DEMAND'),
+('charlestown', 42.3762, -71.0608, 0.85, 18, 'DEMAND'),
+('charlestown', 42.3762, -71.0608, 0.20, 12, 'DEMAND')
+on conflict do nothing;
+
+-- East Boston
+insert into heatmap_cells (area_code, lat, lng, intensity, hour_of_day, metric_type)
+values
+('eastboston', 42.3691, -71.0395, 0.75, 08, 'DEMAND'),
+('eastboston', 42.3691, -71.0395, 0.80, 17, 'DEMAND'),
+('eastboston', 42.3691, -71.0395, 0.50, 13, 'DEMAND')
+on conflict do nothing;
+
+-- West End
+insert into heatmap_cells (area_code, lat, lng, intensity, hour_of_day, metric_type)
+values
+('westend', 42.3662, -71.0621, 0.96, 18, 'DEMAND'),
+('westend', 42.3662, -71.0621, 0.70, 08, 'DEMAND'),
+('westend', 42.3662, -71.0621, 0.40, 14, 'DEMAND')
+on conflict do nothing;
+
+-- South End
+insert into heatmap_cells (area_code, lat, lng, intensity, hour_of_day, metric_type)
+values
+('southend', 42.3448, -71.0706, 0.82, 08, 'DEMAND'),
+('southend', 42.3448, -71.0706, 0.90, 19, 'DEMAND'),
+('southend', 42.3448, -71.0706, 0.50, 22, 'DEMAND')
+on conflict do nothing;
+
+-- East Somerville
+insert into heatmap_cells (area_code, lat, lng, intensity, hour_of_day, metric_type)
+values
+('eastsomerville', 42.3794, -71.0866, 0.88, 08, 'DEMAND'),
+('eastsomerville', 42.3794, -71.0866, 0.92, 17, 'DEMAND'),
+('eastsomerville', 42.3794, -71.0866, 0.45, 13, 'DEMAND'),
+('eastsomerville', 42.3810, -71.0900, 0.70, 18, 'DEMAND')
+on conflict do nothing;
+
+-- Everett
+insert into heatmap_cells (area_code, lat, lng, intensity, hour_of_day, metric_type)
+values
+('everett', 42.3951, -71.0682, 0.92, 08, 'DEMAND'),
+('everett', 42.3951, -71.0682, 0.98, 17, 'DEMAND'),
+('everett', 42.3951, -71.0682, 0.95, 19, 'DEMAND'),
+('everett', 42.3951, -71.0682, 0.40, 13, 'DEMAND'),
+('everett', 42.3930, -71.0650, 0.85, 18, 'DEMAND'),
+('everett', 42.3970, -71.0700, 0.80, 09, 'DEMAND')
+on conflict do nothing;
+
+-- Revere Beach Parkway
+insert into heatmap_cells (area_code, lat, lng, intensity, hour_of_day, metric_type)
+values
+('reverebeachpkwy', 42.4042, -71.0600, 0.94, 08, 'DEMAND'),
+('reverebeachpkwy', 42.4042, -71.0600, 0.97, 17, 'DEMAND'),
+('reverebeachpkwy', 42.4015, -71.0350, 0.85, 08, 'DEMAND'),
+('reverebeachpkwy', 42.4015, -71.0350, 0.89, 17, 'DEMAND'),
+('reverebeachpkwy', 42.4085, -71.0118, 0.90, 15, 'DEMAND'),
+('reverebeachpkwy', 42.4085, -71.0118, 0.30, 23, 'DEMAND'),
+('reverebeachpkwy', 42.4050, -71.0450, 0.50, 13, 'DEMAND')
+on conflict do nothing;
+
+
