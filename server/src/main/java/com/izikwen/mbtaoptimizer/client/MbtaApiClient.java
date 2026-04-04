@@ -1,5 +1,6 @@
 package com.izikwen.mbtaoptimizer.client;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -8,20 +9,36 @@ import org.springframework.web.client.RestClient;
 public class MbtaApiClient {
 
     private final RestClient restClient;
+    private final String apiKey;
 
-    public MbtaApiClient(RestClient.Builder builder, @Value("${mbta.base-url}") String baseUrl) {
-        this.restClient = builder.baseUrl(baseUrl).build();
+    public MbtaApiClient(RestClient.Builder builder,
+                         @Value("${mbta.api-key:}") String apiKey) {
+        this.apiKey = apiKey;
+        RestClient.Builder b = builder.baseUrl("https://api-v3.mbta.com");
+        if (apiKey != null && !apiKey.isBlank()) {
+            b.defaultHeader("x-api-key", apiKey);
+        }
+        this.restClient = b.build();
     }
 
-    public String getStopsRaw() {
-        return restClient.get().uri("/stops").retrieve().body(String.class);
+    public JsonNode getRoutes(String filterType) {
+        String uri = filterType != null
+                ? "/routes?filter[type]=" + filterType
+                : "/routes";
+        return restClient.get().uri(uri).retrieve().body(JsonNode.class);
     }
 
-    public String getRoutesRaw() {
-        return restClient.get().uri("/routes").retrieve().body(String.class);
+    public JsonNode getStopsForRoute(String routeId) {
+        return restClient.get()
+                .uri("/stops?filter[route]={routeId}&sort=name", routeId)
+                .retrieve()
+                .body(JsonNode.class);
     }
 
-    public String getPredictionsRaw() {
-        return restClient.get().uri("/predictions").retrieve().body(String.class);
+    public JsonNode getRoutePatterns(String routeId) {
+        return restClient.get()
+                .uri("/route_patterns?filter[route]={routeId}&include=representative_trip.stops", routeId)
+                .retrieve()
+                .body(JsonNode.class);
     }
 }

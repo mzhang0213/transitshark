@@ -7,20 +7,30 @@ import jakarta.persistence.*;
 public class TransitStop {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
     @Column(unique = true, length = 100)
     private String mbtaStopId;
+
     @Column(nullable = false, length = 200)
     private String name;
+
     @Column(nullable = false, length = 50)
     private String mode;
+
     @Column(nullable = false)
     private Double lat;
+
     @Column(nullable = false)
     private Double lng;
+
     @Column(nullable = false)
     private Boolean active;
+
     @Column(nullable = false)
     private Boolean movable;
+
+    @Column(length = 50)
+    private String zoneId;
 
     public TransitStop() {}
 
@@ -40,4 +50,6 @@ public class TransitStop {
     public void setActive(Boolean active) { this.active = active; }
     public Boolean getMovable() { return movable; }
     public void setMovable(Boolean movable) { this.movable = movable; }
+    public String getZoneId() { return zoneId; }
+    public void setZoneId(String zoneId) { this.zoneId = zoneId; }
 }

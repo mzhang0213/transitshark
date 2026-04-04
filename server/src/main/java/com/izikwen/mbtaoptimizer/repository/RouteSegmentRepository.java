@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface RouteSegmentRepository extends JpaRepository<RouteSegment, Long> {
     List<RouteSegment> findByRoute_Id(Long routeId);
+    List<RouteSegment> findByFromStop_IdOrToStop_Id(Long fromStopId, Long toStopId);
 }

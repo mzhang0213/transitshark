@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface DemandSnapshotRepository extends JpaRepository<DemandSnapshot, Long> {
     List<DemandSnapshot> findByAreaCodeIgnoreCase(String areaCode);
+    List<DemandSnapshot> findByHourOfDay(Integer hourOfDay);
 }

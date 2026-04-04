@@ -8,11 +8,11 @@ import java.math.BigDecimal;
 public class RouteSegment {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "route_id", nullable = false)
+    @ManyToOne(fetch = FetchType.EAGER) @JoinColumn(name = "route_id", nullable = false)
     private TransitRoute route;
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "from_stop_id", nullable = false)
+    @ManyToOne(fetch = FetchType.EAGER) @JoinColumn(name = "from_stop_id", nullable = false)
     private TransitStop fromStop;
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "to_stop_id", nullable = false)
+    @ManyToOne(fetch = FetchType.EAGER) @JoinColumn(name = "to_stop_id", nullable = false)
     private TransitStop toStop;
     @Column(nullable = false)
     private Double distanceMeters;

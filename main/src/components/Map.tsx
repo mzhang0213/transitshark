@@ -2,8 +2,8 @@
 
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
+import type { TransitLine } from '@/types/transit';
 
-// Dynamically import the map component to avoid SSR issues
 const MapComponent = dynamic(() => import('./MapClient'), {
   ssr: false,
   loading: () => (
@@ -11,12 +11,16 @@ const MapComponent = dynamic(() => import('./MapClient'), {
       <p className="text-gray-600 dark:text-gray-400 text-lg">Loading map...</p>
     </div>
   )
-});
+}) as React.ComponentType<{ lines: TransitLine[] }>;
 
-const Map = () => {
+interface MapProps {
+  lines: TransitLine[];
+}
+
+const Map = ({ lines }: MapProps) => {
   return (
     <div className="w-full h-full">
-      <MapComponent />
+      <MapComponent lines={lines} />
     </div>
   );
 };

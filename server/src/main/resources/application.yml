@@ -15,7 +15,7 @@ spring:
         format_sql: true
 
 mbta:
-  base-url: https://api-v3.mbta.com
+  api-key: ${MBTA_API_KEY:}
 
 app:
   cors:
