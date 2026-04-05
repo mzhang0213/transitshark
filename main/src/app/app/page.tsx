@@ -19,6 +19,7 @@ export default function Home() {
   const [zones, setZones] = useState<ZoneInfo[]>([]);
   const [zoneScores, setZoneScores] = useState<ZoneScore[]>([]);
   const [editMode, setEditMode] = useState(false);
+  const [movedStops, setMovedStops] = useState<Set<string>>(new Set());
   const [timeOfDay, setTimeOfDay] = useState(() => {
     const now = new Date();
     return now.getHours() * 60 + now.getMinutes();
@@ -41,8 +42,19 @@ export default function Home() {
     .catch(error => console.error('Error fetching data:', error));
   }, []);
 
-  // Called after a stop is dragged — re-fetch scores
-  const onStopMoved = useCallback(async (stopId: number, newLat: number, newLng: number) => {
+  // Called after a stop is dragged — optimistically update edges, then call API
+  const onStopMoved = useCallback(async (stopId: number, newLat: number, newLng: number, mbtaStopId: string) => {
+    // Track this stop as moved
+    setMovedStops(prev => new Set(prev).add(mbtaStopId));
+
+    // Optimistic update: move the stop in local state so edges redraw immediately
+    setLines(prev => prev.map(line => ({
+      ...line,
+      stops: line.stops.map(stop =>
+        stop.mbtaStopId === mbtaStopId ? { ...stop, lat: newLat, lng: newLng } : stop
+      ),
+    })));
+
     try {
       const res = await fetch('/api/modify-stop', {
         method: 'POST',
@@ -54,15 +66,8 @@ export default function Home() {
         }),
       });
       const data = await res.json();
-      // Response contains updated zoneScores
       const scores = Array.isArray(data) ? data : data.zoneScores;
       if (scores) setZoneScores(scores);
-
-      // Re-fetch network to reflect new stop position
-      const netRes = await fetch('/api/network?type=0,1,3');
-      const netData = await netRes.json();
-      const updatedLines = Array.isArray(netData) ? netData : netData.lines;
-      setLines(updatedLines ?? []);
     } catch (error) {
       console.error('Error moving stop:', error);
     }
@@ -86,6 +91,7 @@ export default function Home() {
             zones={zones}
             zoneScores={zoneScores}
             editMode={editMode}
+            movedStops={movedStops}
             onStopMoved={onStopMoved}
           />
         </div>
@@ -123,7 +129,7 @@ export default function Home() {
           className={editMode ? 'active-button' : ''}
           onClick={() => setEditMode(!editMode)}
         >
-          {editMode ? 'Done Editing' : 'Edit Map'}
+          {editMode ? 'Done' : 'Edit Map'}
         </button>
         <div className="fare-wrapper">
           <button>Fare Estimate</button>

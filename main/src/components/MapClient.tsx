@@ -12,7 +12,8 @@ interface MapClientProps {
   zones: ZoneInfo[];
   zoneScores: ZoneScore[];
   editMode: boolean;
-  onStopMoved: (stopId: number, newLat: number, newLng: number) => void;
+  movedStops: Set<string>;
+  onStopMoved: (stopId: number, newLat: number, newLng: number, mbtaStopId: string) => void;
 }
 
 const createStopIcon = (color: string, mode: string) => {
@@ -91,7 +92,7 @@ const MAP_STYLES = {
 
 const BUS_COLOR = '#e6a5b1';
 
-const MapClient = ({ lines, zones, zoneScores, editMode, onStopMoved }: MapClientProps) => {
+const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, onStopMoved }: MapClientProps) => {
   const defaultCenter: [number, number] = [42.3601, -71.0589];
   const [currentStyle, setCurrentStyle] = useState('cartoVoyager');
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
@@ -233,10 +234,10 @@ const MapClient = ({ lines, zones, zoneScores, editMode, onStopMoved }: MapClien
             longitudeExtractor={(p: { lng: number }) => p.lng}
             latitudeExtractor={(p: { lat: number }) => p.lat}
             intensityExtractor={(p: { intensity: number }) => p.intensity}
-            radius={40}
-            blur={60}
+            radius={50}
+            blur={50}
             max={1}
-            opacity={0.35}
+            opacity={0.5}
             gradient={{
               0.0: '#0000ff',
               0.2: '#00bfff',
@@ -288,7 +289,8 @@ const MapClient = ({ lines, zones, zoneScores, editMode, onStopMoved }: MapClien
         {/* Stop markers - circles for train, squares for bus */}
         {stopMarkers.map(({ stop, lines: stopLines }) => {
           const primaryLine = stopLines[0];
-          const icon = createStopIcon(primaryLine.color, primaryLine.mode);
+          const isMoved = movedStops.has(stop.mbtaStopId);
+          const icon = createStopIcon(isMoved ? '#FFD700' : primaryLine.color, primaryLine.mode);
           return (
             <Marker
               key={`stop-${stop.mbtaStopId}`}
@@ -299,7 +301,7 @@ const MapClient = ({ lines, zones, zoneScores, editMode, onStopMoved }: MapClien
                 dragend: (e) => {
                   const marker = e.target as L.Marker;
                   const pos = marker.getLatLng();
-                  onStopMoved(stop.stopId, pos.lat, pos.lng);
+                  onStopMoved(stop.stopId, pos.lat, pos.lng, stop.mbtaStopId);
                 },
               } : {}}
             >

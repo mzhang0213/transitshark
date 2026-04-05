@@ -28,8 +28,8 @@ import java.util.stream.Collectors;
 @Service
 public class ZoneService {
 
-    private static final double LAT_CELL = 0.004;
-    private static final double LNG_CELL = 0.004;
+    private static final double LAT_CELL = 0.003;
+    private static final double LNG_CELL = 0.003;
 
     // --- demand synthesis fallback params ---
     private static final double POP_SIGMA_KM = 6.0;

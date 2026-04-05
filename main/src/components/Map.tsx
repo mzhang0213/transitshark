@@ -18,7 +18,8 @@ interface MapProps {
   zones: ZoneInfo[];
   zoneScores: ZoneScore[];
   editMode: boolean;
-  onStopMoved: (stopId: number, newLat: number, newLng: number) => void;
+  movedStops: Set<string>;
+  onStopMoved: (stopId: number, newLat: number, newLng: number, mbtaStopId: string) => void;
 }
 
 const Map = (props: MapProps) => {
