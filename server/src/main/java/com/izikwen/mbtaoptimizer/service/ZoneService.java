@@ -76,28 +76,19 @@ public class ZoneService {
         return computeZones(fetchTypedStops());
     }
 
-    /**
-     * Compute zone scores from frontend-provided stops (frontend is source of truth).
-     */
-    public List<ZoneScoreResponse> computeScoresFromStops(List<TypedStop> stops) {
-        return computeScoresInternal(stops);
-    }
-
     public List<ZoneScoreResponse> getZoneScores() {
-        return computeScoresInternal(fetchTypedStops());
-    }
-
-    private List<ZoneScoreResponse> computeScoresInternal(List<TypedStop> stops) {
+        List<TypedStop> stops = fetchTypedStops();
         List<ZoneInfoResponse> zones = computeZones(stops);
         double[] center = centroid(stops);
 
+        // Try to load active dataset factors
         Map<String, ZoneData> activeData = loadActiveDataset(
                 zones.stream().map(ZoneInfoResponse::getZoneId).toList());
 
         List<Double> demandScores = new ArrayList<>();
         List<Double> serviceScores = new ArrayList<>();
         List<ZoneScoreResponse> scores = new ArrayList<>();
-
+        List<String[]> csvRows = new ArrayList<>();
         for (ZoneInfoResponse z : zones) {
             double demand;
             ZoneData zd = activeData.get(z.getZoneId());
@@ -116,15 +107,34 @@ public class ZoneService {
             serviceScores.add(service);
         }
 
-        normScores(demandScores);
-        normScores(serviceScores);
-
-        for (int i = 0; i < zones.size(); i++) {
-            double score = serviceScores.get(i) - demandScores.get(i);
-            ZoneInfoResponse z = zones.get(i);
-            scores.add(new ZoneScoreResponse(z.getZoneId(), z.getName(), score));
+        List<Double> zoneScores = new ArrayList<>();
+        for (int i=0;i<zones.size();i++) {
+            double gap = demandScores.get(i) - serviceScores.get(i);
+            zoneScores.add(gap);
         }
 
+        normScores(demandScores);
+        normScores(serviceScores);
+        normScores(zoneScores);
+
+        for (int i=0;i<zones.size();i++) {
+            Double currServiceScore = serviceScores.get(i);
+            Double currDemandScore = demandScores.get(i);
+            double score = currServiceScore - currDemandScore;
+            ZoneInfoResponse z = zones.get(i);
+
+            scores.add(new ZoneScoreResponse(z.getZoneId(), z.getName(), score));
+            csvRows.add(new String[]{
+                z.getZoneId(),
+                String.valueOf(z.getCenterLat()),
+                String.valueOf(z.getCenterLng()),
+                String.format("%.4f", currDemandScore),
+                String.format("%.4f", currServiceScore),
+                String.format("%.1f", score)
+            });
+        }
+
+        //exportCsv(csvRows);
         return scores;
     }
 
@@ -349,5 +359,5 @@ public class ZoneService {
         return Math.round(v * 1_000_000.0) / 1_000_000.0;
     }
 
-    public record TypedStop(double lat, double lng, int routeType) {}
+    record TypedStop(double lat, double lng, int routeType) {}
 }

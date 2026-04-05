@@ -14,7 +14,7 @@ interface MapClientProps {
   editMode: boolean;
   movedStops: Set<string>;
   onStopMoved: (stopId: number, newLat: number, newLng: number, mbtaStopId: string) => void;
-  onServiceChanged: () => void;
+  onServiceChanged: (lineId: number, serviceLevel: number) => void;
 }
 
 const createStopIcon = (color: string, mode: string) => {
@@ -110,14 +110,6 @@ const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, onStopMoved
   const [selectedLineId, setSelectedLineId] = useState<number | null>(null);
   const [serviceLine, setServiceLine] = useState<SelectedLine | null>(null);
   const [serviceLevel, setServiceLevel] = useState(0);
-  const [heatmapVisible, setHeatmapVisible] = useState(true);
-
-  useEffect(() => {
-    // Force remount: hide for one frame, then show
-    setHeatmapVisible(false);
-    const id = requestAnimationFrame(() => setHeatmapVisible(true));
-    return () => cancelAnimationFrame(id);
-  }, [zoneScores]);
 
   const getUserLocation = () => {
     if (!navigator.geolocation) {
@@ -248,7 +240,7 @@ const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, onStopMoved
         />
 
         {/* Heatmap layer from zone scores - only in edit mode */}
-        {editMode && heatmapVisible && heatmapPoints.length > 0 && (
+        {editMode && heatmapPoints.length > 0 && (
           <HeatmapLayer
             points={heatmapPoints}
             longitudeExtractor={(p: { lng: number }) => p.lng}
@@ -430,12 +422,12 @@ const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, onStopMoved
               onChange={(e) => setServiceLevel(Number(e.target.value))}
               onMouseUp={() => {
                 if (serviceLevel !== 0) {
-                  onServiceChanged();
+                  onServiceChanged(serviceLine.lineId, serviceLevel);
                 }
               }}
               onTouchEnd={() => {
                 if (serviceLevel !== 0) {
-                  onServiceChanged();
+                  onServiceChanged(serviceLine.lineId, serviceLevel);
                 }
               }}
               className="flex-1 cursor-pointer"

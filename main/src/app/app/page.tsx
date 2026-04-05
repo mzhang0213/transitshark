@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect, useState, useCallback, useRef} from 'react';
+import {useEffect, useState, useCallback} from 'react';
 import Map from "@/components/Map";
 import FareCalculator from "@/components/FareCalculator";
 import type { TransitLine, ZoneInfo, ZoneScore } from '@/types/transit';
@@ -14,29 +14,6 @@ function formatTime(minutes: number) {
   return `${display}:${m.toString().padStart(2, '0')} ${period}`;
 }
 
-const MODE_TO_ROUTE_TYPE: Record<string, number> = {
-  light_rail: 0,
-  heavy_rail: 1,
-  commuter_rail: 2,
-  bus: 3,
-};
-
-/** Extract all stops from current lines state into the format the backend expects */
-function extractStopsForScoring(lines: TransitLine[]): { lat: number; lng: number; routeType: number }[] {
-  const seen = new Set<string>();
-  const stops: { lat: number; lng: number; routeType: number }[] = [];
-  for (const line of lines) {
-    const routeType = MODE_TO_ROUTE_TYPE[line.mode] ?? 3;
-    for (const stop of line.stops) {
-      const key = stop.mbtaStopId;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      stops.push({ lat: stop.lat, lng: stop.lng, routeType });
-    }
-  }
-  return stops;
-}
-
 export default function Home() {
   const [lines, setLines] = useState<TransitLine[]>([]);
   const [zones, setZones] = useState<ZoneInfo[]>([]);
@@ -48,31 +25,9 @@ export default function Home() {
     return now.getHours() * 60 + now.getMinutes();
   });
 
-  // Keep a ref to lines so async callbacks always see the latest state
-  const linesRef = useRef(lines);
-  linesRef.current = lines;
-
   const totalScore = zoneScores.reduce((sum, z) => sum + z.score, 0);
 
-  /** Send current frontend stop state to backend for score computation */
-  const recomputeScores = useCallback(async (currentLines: TransitLine[]) => {
-    try {
-      const res = await fetch('/api/zones/compute-scores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stops: extractStopsForScoring(currentLines) }),
-      });
-      const data = await res.json();
-      const scores = Array.isArray(data) ? data : data.zoneScores;
-      if (Array.isArray(scores)) {
-        setZoneScores(scores);
-      }
-    } catch (error) {
-      console.error('Error computing scores:', error);
-    }
-  }, []);
-
-  // Fetch network + zones + initial scores in parallel
+  // Fetch network + zones + scores in parallel
   useEffect(() => {
     Promise.all([
       fetch('/api/network?type=0,1,3').then(r => r.json()),
@@ -87,28 +42,66 @@ export default function Home() {
     .catch(error => console.error('Error fetching data:', error));
   }, []);
 
-  // Called after a stop is dragged
+  // Called after a stop is dragged — optimistically update edges, then call API
   const onStopMoved = useCallback(async (_stopId: number, newLat: number, newLng: number, mbtaStopId: string) => {
+    // Track this stop as moved
     setMovedStops(prev => new Set(prev).add(mbtaStopId));
 
-    // Optimistic update — edges redraw immediately
-    const updatedLines = linesRef.current.map(line => ({
+    // Optimistic update: move the stop in local state so edges redraw immediately
+    setLines(prev => prev.map(line => ({
       ...line,
       stops: line.stops.map(stop =>
         stop.mbtaStopId === mbtaStopId ? { ...stop, lat: newLat, lng: newLng } : stop
       ),
-    }));
-    setLines(updatedLines);
+    })));
 
-    // Recompute scores from the updated frontend state
-    await recomputeScores(updatedLines);
-  }, [recomputeScores]);
+    try {
+      const res = await fetch('/api/modify-stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mbtaStopId,
+          modificationType: 'MOVE',
+          modification: { newLat, newLng },
+        }),
+      });
+      const data = await res.json();
+      const scores = Array.isArray(data) ? data : data.zoneScores;
+      if (scores) {
+        setZoneScores(scores);
+        console.log("zone scores updated");
+      }
+    } catch (error) {
+      console.error('Error moving stop:', error);
+    }
+  }, []);
 
-  // Called when service level is changed on a line (no backend mutation needed)
-  const onServiceChanged = useCallback(async () => {
-    // Service changes affect the heatmap — recompute from current state
-    await recomputeScores(linesRef.current);
-  }, [recomputeScores]);
+  // Called when service level is changed on a line
+  const onServiceChanged = useCallback(async (lineId: number, serviceLevel: number) => {
+    // serviceLevel: -5 to +5 relative to baseline (0)
+    // Each unit = one INCR_SERVICE or DECR_SERVICE call worth 1 minute
+    const modificationType = serviceLevel >= 0 ? 'INCR_SERVICE' : 'DECR_SERVICE';
+    try {
+      const res = await fetch('/api/modify-line', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          line: lineId,
+          modificationType,
+          modification: { frequencyChangeMinutes: Math.abs(serviceLevel) },
+          time: Math.floor(timeOfDay / 60),
+        }),
+      });
+      const data = await res.json();
+      const scores = data.zoneScores;
+      if (Array.isArray(scores)) {
+        setZoneScores(scores);
+        console.log("zone scores updated")
+      }
+    } catch (error) {
+      console.error('Error changing service:', error);
+    }
+  }, [timeOfDay]);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black relative">
