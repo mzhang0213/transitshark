@@ -1,5 +1,6 @@
 package com.izikwen.mbtaoptimizer.controller;
 
+import com.izikwen.mbtaoptimizer.dto.request.ComputeScoresRequest;
 import com.izikwen.mbtaoptimizer.dto.response.ZoneInfoResponse;
 import com.izikwen.mbtaoptimizer.dto.response.ZoneScoreResponse;
 import com.izikwen.mbtaoptimizer.service.ZoneService;
@@ -26,5 +27,14 @@ public class ZoneController {
     @GetMapping("/scores")
     public ResponseEntity<List<ZoneScoreResponse>> getZoneScores() {
         return ResponseEntity.ok(zoneService.getZoneScores());
+    }
+
+    @PostMapping("/compute-scores")
+    public ResponseEntity<List<ZoneScoreResponse>> computeScores(
+            @RequestBody ComputeScoresRequest request) {
+        List<ZoneService.TypedStop> stops = request.getStops().stream()
+                .map(s -> new ZoneService.TypedStop(s.getLat(), s.getLng(), s.getRouteType()))
+                .toList();
+        return ResponseEntity.ok(zoneService.computeScoresFromStops(stops));
     }
 }

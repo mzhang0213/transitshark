@@ -20,7 +20,7 @@ interface MapProps {
   editMode: boolean;
   movedStops: Set<string>;
   onStopMoved: (stopId: number, newLat: number, newLng: number, mbtaStopId: string) => void;
-  onServiceChanged: (lineId: number, serviceLevel: number) => void;
+  onServiceChanged: () => void;
 }
 
 const Map = (props: MapProps) => {
