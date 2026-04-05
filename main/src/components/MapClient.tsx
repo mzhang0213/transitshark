@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { HeatmapLayer } from 'react-leaflet-heatmap-layer-v3';
 import type { TransitLine, TransitStop, ZoneInfo, ZoneScore } from '@/types/transit';
@@ -13,7 +13,8 @@ interface MapClientProps {
   zoneScores: ZoneScore[];
   editMode: boolean;
   movedStops: Set<string>;
-  scoreVersion: number;
+  initialView: { center: [number, number]; zoom: number } | null;
+  onViewChange: (view: { center: [number, number]; zoom: number }) => void;
   onStopMoved: (stopId: number, newLat: number, newLng: number, mbtaStopId: string) => void;
   onServiceChanged: (lineId: number, serviceLevel: number) => void;
 }
@@ -94,6 +95,22 @@ const MAP_STYLES = {
 
 const BUS_COLOR = '#e6a5b1';
 
+function MapViewTracker({ onViewChange }: { onViewChange: (view: { center: [number, number]; zoom: number }) => void }) {
+  useMapEvents({
+    moveend: (e) => {
+      const map = e.target;
+      const c = map.getCenter();
+      onViewChange({ center: [c.lat, c.lng], zoom: map.getZoom() });
+    },
+    zoomend: (e) => {
+      const map = e.target;
+      const c = map.getCenter();
+      onViewChange({ center: [c.lat, c.lng], zoom: map.getZoom() });
+    },
+  });
+  return null;
+}
+
 interface SelectedLine {
   lineId: number;
   lineName: string;
@@ -102,7 +119,7 @@ interface SelectedLine {
   clickLatLng: [number, number];
 }
 
-const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, scoreVersion, onStopMoved, onServiceChanged }: MapClientProps) => {
+const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, initialView, onViewChange, onStopMoved, onServiceChanged }: MapClientProps) => {
   const defaultCenter: [number, number] = [42.3601, -71.0589];
   const [currentStyle, setCurrentStyle] = useState('cartoVoyager');
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
@@ -110,7 +127,7 @@ const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, scoreVersio
   const [isLocating, setIsLocating] = useState(false);
   const [selectedLineId, setSelectedLineId] = useState<number | null>(null);
   const [serviceLine, setServiceLine] = useState<SelectedLine | null>(null);
-  const [serviceLevel, setServiceLevel] = useState(0);
+  const [serviceLevels, setServiceLevels] = useState<Map<number, number>>(new Map());
 
   const getUserLocation = () => {
     if (!navigator.geolocation) {
@@ -230,11 +247,12 @@ const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, scoreVersio
   return (
     <div className="relative w-full h-full">
       <MapContainer
-        center={userLocation ? [userLocation.lat, userLocation.lng] : defaultCenter}
-        zoom={userLocation ? 15 : 13}
+        center={initialView?.center ?? (userLocation ? [userLocation.lat, userLocation.lng] : defaultCenter)}
+        zoom={initialView?.zoom ?? (userLocation ? 15 : 13)}
         style={{ height: '100%', width: '100%' }}
         className="z-0"
       >
+        <MapViewTracker onViewChange={onViewChange} />
         <TileLayer
           url={MAP_STYLES[currentStyle as keyof typeof MAP_STYLES].url}
           attribution={MAP_STYLES[currentStyle as keyof typeof MAP_STYLES].attribution}
@@ -243,7 +261,6 @@ const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, scoreVersio
         {/* Heatmap layer from zone scores - only in edit mode */}
         {editMode && heatmapPoints.length > 0 && (
           <HeatmapLayer
-            key={`heatmap-${scoreVersion}`}
             points={heatmapPoints}
             longitudeExtractor={(p: { lng: number }) => p.lng}
             latitudeExtractor={(p: { lat: number }) => p.lat}
@@ -312,7 +329,6 @@ const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, scoreVersio
                       mode: line.mode,
                       clickLatLng: [latlng.lat, latlng.lng],
                     });
-                    setServiceLevel(0);
                   }
                 }
               },
@@ -378,75 +394,89 @@ const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, scoreVersio
       </MapContainer>
 
       {/* Service Level Slider Panel */}
-      {editMode && serviceLine && (
-        <div
-          className="absolute z-50 p-4 rounded-xl shadow-2xl"
-          style={{
-            top: 80,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'rgba(15, 15, 25, 0.92)',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            minWidth: 280,
-          }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div
-                style={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: serviceLine.mode === 'bus' ? 2 : '50%',
-                  backgroundColor: serviceLine.color,
-                }}
-              />
-              <span className="text-white font-bold text-sm">{serviceLine.lineName}</span>
+      {editMode && serviceLine && (() => {
+        const isBus = serviceLine.mode === 'bus';
+        const defaultCars = isBus ? 5 : 4;
+        const currentCars = serviceLevels.get(serviceLine.lineId) ?? defaultCars;
+        const maxCars = isBus ? 30 : 12;
+        return (
+          <div
+            className="absolute z-50 p-4 rounded-xl shadow-2xl"
+            style={{
+              top: 80,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(15, 15, 25, 0.92)',
+              backdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              minWidth: 280,
+            }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div
+                  style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: isBus ? 2 : '50%',
+                    backgroundColor: serviceLine.color,
+                  }}
+                />
+                <span className="text-white font-bold text-sm">{serviceLine.lineName}</span>
+              </div>
+              <button
+                onClick={() => setServiceLine(null)}
+                className="text-gray-400 hover:text-white text-lg leading-none"
+              >
+                &times;
+              </button>
             </div>
-            <button
-              onClick={() => setServiceLine(null)}
-              className="text-gray-400 hover:text-white text-lg leading-none"
-            >
-              &times;
-            </button>
+            <p className="text-xs text-gray-400 mb-2">
+              {isBus ? 'Number of buses on this route' : 'Number of train cars on this line'}
+            </p>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500">1</span>
+              <input
+                type="range"
+                min={1}
+                max={maxCars}
+                step={1}
+                value={currentCars}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setServiceLevels(prev => {
+                    const next = new Map(prev);
+                    next.set(serviceLine.lineId, val);
+                    return next;
+                  });
+                }}
+                onMouseUp={() => {
+                  onServiceChanged(serviceLine.lineId, currentCars);
+                }}
+                onTouchEnd={() => {
+                  onServiceChanged(serviceLine.lineId, currentCars);
+                }}
+                className="flex-1 cursor-pointer"
+                style={{ accentColor: serviceLine.color }}
+              />
+              <span className="text-xs text-gray-500">{maxCars}</span>
+            </div>
+            <div className="text-center mt-2">
+              <span className="text-sm font-mono font-bold text-white">
+                {currentCars} {isBus ? (currentCars === 1 ? 'bus' : 'buses') : (currentCars === 1 ? 'car' : 'cars')}
+              </span>
+              {currentCars !== defaultCars && (
+                <span
+                  className="text-xs ml-2"
+                  style={{ color: currentCars > defaultCars ? '#4ade80' : '#f87171' }}
+                >
+                  ({currentCars > defaultCars ? '+' : ''}{currentCars - defaultCars} from default)
+                </span>
+              )}
+            </div>
           </div>
-          <p className="text-xs text-gray-400 mb-2">
-            {serviceLine.mode === 'bus' ? 'Adjust bus frequency' : 'Adjust train frequency'}
-          </p>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-500">Less</span>
-            <input
-              type="range"
-              min={-5}
-              max={5}
-              step={1}
-              value={serviceLevel}
-              onChange={(e) => setServiceLevel(Number(e.target.value))}
-              onMouseUp={() => {
-                if (serviceLevel !== 0) {
-                  onServiceChanged(serviceLine.lineId, serviceLevel);
-                }
-              }}
-              onTouchEnd={() => {
-                if (serviceLevel !== 0) {
-                  onServiceChanged(serviceLine.lineId, serviceLevel);
-                }
-              }}
-              className="flex-1 cursor-pointer"
-              style={{ accentColor: serviceLine.color }}
-            />
-            <span className="text-xs text-gray-500">More</span>
-          </div>
-          <div className="text-center mt-2">
-            <span
-              className="text-sm font-mono font-bold"
-              style={{ color: serviceLevel > 0 ? '#4ade80' : serviceLevel < 0 ? '#f87171' : '#9ca3af' }}
-            >
-              {serviceLevel > 0 ? `+${serviceLevel}` : serviceLevel} min
-            </span>
-          </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

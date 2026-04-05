@@ -19,7 +19,8 @@ interface MapProps {
   zoneScores: ZoneScore[];
   editMode: boolean;
   movedStops: Set<string>;
-  scoreVersion: number;
+  initialView: { center: [number, number]; zoom: number } | null;
+  onViewChange: (view: { center: [number, number]; zoom: number }) => void;
   onStopMoved: (stopId: number, newLat: number, newLng: number, mbtaStopId: string) => void;
   onServiceChanged: (lineId: number, serviceLevel: number) => void;
 }

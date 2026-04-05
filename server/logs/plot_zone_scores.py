@@ -33,7 +33,7 @@ def main():
     # 1. Spatial heatmap of zone scores
     ax = axes[0, 0]
     sc = ax.scatter(df["center_lng"], df["center_lat"], c=df["score"],
-                    cmap="RdYlGn_r", s=12, edgecolors="none", vmin=-1, vmax=1)
+                    cmap="RdYlGn_r", s=12, edgecolors="none", vmin=-0.5, vmax=0.5)
     fig.colorbar(sc, ax=ax, label="Zone Score")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
@@ -43,7 +43,7 @@ def main():
     # 2. Demand vs Service scatter
     ax = axes[0, 1]
     colors = ax.scatter(df["demand"], df["service"], c=df["score"],
-                        cmap="RdYlGn_r", s=10, edgecolors="none", vmin=-1, vmax=1)
+                        cmap="RdYlGn_r", s=10, edgecolors="none", vmin=-0.5, vmax=0.5)
     fig.colorbar(colors, ax=ax, label="Zone Score")
     ax.plot([0, 1], [0, 1], "k--", alpha=0.3, label="demand = service")
     ax.set_xlabel("Demand")

@@ -20,6 +20,7 @@ export default function Home() {
   const [zoneScores, setZoneScores] = useState<ZoneScore[]>([]);
   const [editMode, setEditMode] = useState(false);
   const [movedStops, setMovedStops] = useState<Set<string>>(new Set());
+  const [mapView, setMapView] = useState<{ center: [number, number]; zoom: number } | null>(null);
   const [timeOfDay, setTimeOfDay] = useState(() => {
     const now = new Date();
     return now.getHours() * 60 + now.getMinutes();
@@ -137,12 +138,14 @@ export default function Home() {
       <main className="h-screen">
         <div className="w-full h-full">
           <Map
+            key={scoreVersion}
             lines={lines}
             zones={zones}
             zoneScores={zoneScores}
             editMode={editMode}
             movedStops={movedStops}
-            scoreVersion={scoreVersion}
+            initialView={mapView}
+            onViewChange={setMapView}
             onStopMoved={onStopMoved}
             onServiceChanged={onServiceChanged}
           />
