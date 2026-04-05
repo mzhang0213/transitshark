@@ -1,20 +1,19 @@
 package com.izikwen.mbtaoptimizer.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 
 public class ModifyStopRequest {
 
-    @NotNull(message = "stopId is required")
-    private Long stopId;
+    @NotBlank(message = "mbtaStopId is required")
+    private String mbtaStopId;
 
     @NotBlank(message = "modificationType is required (MOVE or DELETE)")
     private String modificationType;
 
     private ModificationPayload modification;
 
-    public Long getStopId() { return stopId; }
-    public void setStopId(Long stopId) { this.stopId = stopId; }
+    public String getMbtaStopId() { return mbtaStopId; }
+    public void setMbtaStopId(String mbtaStopId) { this.mbtaStopId = mbtaStopId; }
     public String getModificationType() { return modificationType; }
     public void setModificationType(String modificationType) { this.modificationType = modificationType; }
     public ModificationPayload getModification() { return modification; }

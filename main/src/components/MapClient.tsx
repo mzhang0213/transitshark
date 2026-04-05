@@ -14,6 +14,7 @@ interface MapClientProps {
   editMode: boolean;
   movedStops: Set<string>;
   onStopMoved: (stopId: number, newLat: number, newLng: number, mbtaStopId: string) => void;
+  onServiceChanged: (lineId: number, serviceLevel: number) => void;
 }
 
 const createStopIcon = (color: string, mode: string) => {
@@ -92,13 +93,23 @@ const MAP_STYLES = {
 
 const BUS_COLOR = '#e6a5b1';
 
-const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, onStopMoved }: MapClientProps) => {
+interface SelectedLine {
+  lineId: number;
+  lineName: string;
+  color: string;
+  mode: string;
+  clickLatLng: [number, number];
+}
+
+const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, onStopMoved, onServiceChanged }: MapClientProps) => {
   const defaultCenter: [number, number] = [42.3601, -71.0589];
   const [currentStyle, setCurrentStyle] = useState('cartoVoyager');
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [selectedLineId, setSelectedLineId] = useState<number | null>(null);
+  const [serviceLine, setServiceLine] = useState<SelectedLine | null>(null);
+  const [serviceLevel, setServiceLevel] = useState(0);
 
   const getUserLocation = () => {
     if (!navigator.geolocation) {
@@ -200,8 +211,9 @@ const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, onStopMoved
         lng: z.centerLng,
         intensity: scoreMap.get(z.zoneId) || 0,
       }));
-    const maxVal = Math.max(...raw.map(p => p.intensity), 1);
-    return raw.map(p => ({ ...p, intensity: p.intensity / maxVal }));
+    const maxVal = Math.max(...raw.map(p => p.intensity));
+    const minVal = Math.min(...raw.map(p => p.intensity));
+    return raw.map(p => ({ ...p, intensity: (p.intensity-minVal) / (maxVal-minVal)}));
   }, [zones, zoneScores]);
 
   const isLoaded = Array.isArray(lines) && lines.length > 0;
@@ -277,12 +289,32 @@ const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, onStopMoved
           <Polyline
             key={`edge-${i}`}
             positions={edge.positions}
-            color={edge.lineId === selectedLineId ? '#e06080' : edge.color}
-            weight={edge.lineId === selectedLineId ? 12 : (edge.isBus ? 6 : 5)}
+            color={edge.lineId === (serviceLine?.lineId ?? selectedLineId) ? '#e06080' : edge.color}
+            weight={edge.lineId === (serviceLine?.lineId ?? selectedLineId) ? 12 : (edge.isBus ? 6 : 5)}
             opacity={edge.isBus ? 0.6 : 1}
-            eventHandlers={edge.isBus ? {
-              click: () => setSelectedLineId(selectedLineId === edge.lineId ? null : edge.lineId),
-            } : {}}
+            eventHandlers={{
+              click: (e) => {
+                // Always toggle bus stop visibility when clicking a bus line
+                if (edge.isBus) {
+                  setSelectedLineId(selectedLineId === edge.lineId ? null : edge.lineId);
+                }
+                // In edit mode, also show service slider for any line
+                if (editMode) {
+                  const latlng = e.latlng;
+                  const line = lines.find(l => l.lineId === edge.lineId);
+                  if (line) {
+                    setServiceLine({
+                      lineId: line.lineId,
+                      lineName: line.lineName,
+                      color: edge.color,
+                      mode: line.mode,
+                      clickLatLng: [latlng.lat, latlng.lng],
+                    });
+                    setServiceLevel(0);
+                  }
+                }
+              },
+            }}
           />
         ))}
 
@@ -342,6 +374,77 @@ const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, onStopMoved
           );
         })}
       </MapContainer>
+
+      {/* Service Level Slider Panel */}
+      {editMode && serviceLine && (
+        <div
+          className="absolute z-50 p-4 rounded-xl shadow-2xl"
+          style={{
+            top: 80,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(15, 15, 25, 0.92)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            minWidth: 280,
+          }}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: serviceLine.mode === 'bus' ? 2 : '50%',
+                  backgroundColor: serviceLine.color,
+                }}
+              />
+              <span className="text-white font-bold text-sm">{serviceLine.lineName}</span>
+            </div>
+            <button
+              onClick={() => setServiceLine(null)}
+              className="text-gray-400 hover:text-white text-lg leading-none"
+            >
+              &times;
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mb-2">
+            {serviceLine.mode === 'bus' ? 'Adjust bus frequency' : 'Adjust train frequency'}
+          </p>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500">Less</span>
+            <input
+              type="range"
+              min={-5}
+              max={5}
+              step={1}
+              value={serviceLevel}
+              onChange={(e) => setServiceLevel(Number(e.target.value))}
+              onMouseUp={() => {
+                if (serviceLevel !== 0) {
+                  onServiceChanged(serviceLine.lineId, serviceLevel);
+                }
+              }}
+              onTouchEnd={() => {
+                if (serviceLevel !== 0) {
+                  onServiceChanged(serviceLine.lineId, serviceLevel);
+                }
+              }}
+              className="flex-1 cursor-pointer"
+              style={{ accentColor: serviceLine.color }}
+            />
+            <span className="text-xs text-gray-500">More</span>
+          </div>
+          <div className="text-center mt-2">
+            <span
+              className="text-sm font-mono font-bold"
+              style={{ color: serviceLevel > 0 ? '#4ade80' : serviceLevel < 0 ? '#f87171' : '#9ca3af' }}
+            >
+              {serviceLevel > 0 ? `+${serviceLevel}` : serviceLevel} min
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

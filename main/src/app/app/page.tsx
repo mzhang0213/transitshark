@@ -43,7 +43,7 @@ export default function Home() {
   }, []);
 
   // Called after a stop is dragged — optimistically update edges, then call API
-  const onStopMoved = useCallback(async (stopId: number, newLat: number, newLng: number, mbtaStopId: string) => {
+  const onStopMoved = useCallback(async (_stopId: number, newLat: number, newLng: number, mbtaStopId: string) => {
     // Track this stop as moved
     setMovedStops(prev => new Set(prev).add(mbtaStopId));
 
@@ -60,18 +60,48 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          stopId,
+          mbtaStopId,
           modificationType: 'MOVE',
           modification: { newLat, newLng },
         }),
       });
       const data = await res.json();
       const scores = Array.isArray(data) ? data : data.zoneScores;
-      if (scores) setZoneScores(scores);
+      if (scores) {
+        setZoneScores(scores);
+        console.log("zone scores updated");
+      }
     } catch (error) {
       console.error('Error moving stop:', error);
     }
   }, []);
+
+  // Called when service level is changed on a line
+  const onServiceChanged = useCallback(async (lineId: number, serviceLevel: number) => {
+    // serviceLevel: -5 to +5 relative to baseline (0)
+    // Each unit = one INCR_SERVICE or DECR_SERVICE call worth 1 minute
+    const modificationType = serviceLevel >= 0 ? 'INCR_SERVICE' : 'DECR_SERVICE';
+    try {
+      const res = await fetch('/api/modify-line', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          line: lineId,
+          modificationType,
+          modification: { frequencyChangeMinutes: Math.abs(serviceLevel) },
+          time: Math.floor(timeOfDay / 60),
+        }),
+      });
+      const data = await res.json();
+      const scores = data.zoneScores;
+      if (Array.isArray(scores)) {
+        setZoneScores(scores);
+        console.log("zone scores updated")
+      }
+    } catch (error) {
+      console.error('Error changing service:', error);
+    }
+  }, [timeOfDay]);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black relative">
@@ -93,6 +123,7 @@ export default function Home() {
             editMode={editMode}
             movedStops={movedStops}
             onStopMoved={onStopMoved}
+            onServiceChanged={onServiceChanged}
           />
         </div>
       </main>

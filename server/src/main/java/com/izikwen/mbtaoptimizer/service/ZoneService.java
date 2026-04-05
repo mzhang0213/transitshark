@@ -8,8 +8,18 @@ import com.izikwen.mbtaoptimizer.dto.response.ZoneScoreResponse;
 import com.izikwen.mbtaoptimizer.entity.ZoneData;
 import com.izikwen.mbtaoptimizer.repository.DataSetRepository;
 import com.izikwen.mbtaoptimizer.repository.ZoneDataRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -28,6 +38,8 @@ import java.util.stream.Collectors;
 @Service
 public class ZoneService {
 
+    private static final Logger log = LoggerFactory.getLogger(ZoneService.class);
+
     private static final double LAT_CELL = 0.003;
     private static final double LNG_CELL = 0.003;
 
@@ -44,6 +56,7 @@ public class ZoneService {
     private static final double FREQ_LIGHT_RAIL   = 10;
     private static final double FREQ_BUS          = 4;
     private static final double FREQ_COMMUTER     = 2;
+    private static final double[] FREQ_LIST = {FREQ_HEAVY_RAIL,FREQ_LIGHT_RAIL,FREQ_BUS,FREQ_COMMUTER};
 
     private final MbtaApiClient mbtaClient;
     private final DataSetRepository dataSetRepo;
@@ -72,30 +85,88 @@ public class ZoneService {
         Map<String, ZoneData> activeData = loadActiveDataset(
                 zones.stream().map(ZoneInfoResponse::getZoneId).toList());
 
+        List<Double> demandScores = new ArrayList<>();
+        List<Double> serviceScores = new ArrayList<>();
         List<ZoneScoreResponse> scores = new ArrayList<>();
+        List<String[]> csvRows = new ArrayList<>();
         for (ZoneInfoResponse z : zones) {
             double demand;
             ZoneData zd = activeData.get(z.getZoneId());
             if (zd != null) {
-                // Use dataset factors
                 demand = W_POP * zd.getPopulationDensity()
-                       + W_JOB * zd.getJobDensity()
-                       - W_CAR * zd.getCarOwnership();
+                    + W_JOB * zd.getJobDensity()
+                    - W_CAR * zd.getCarOwnership();
                 demand = clamp01(demand + 0.2);
             } else {
-                // Fallback: synthesized from distance
                 demand = demandScoreSynthesized(z.getCenterLat(), z.getCenterLng(), center);
             }
-
+            demandScores.add(demand);
+        }
+        for (ZoneInfoResponse z : zones) {
             double service = serviceScore(z.getCenterLat(), z.getCenterLng(), stops);
+            serviceScores.add(service);
+        }
 
-            double gap = demand - service;
-            double score = Math.max(0, Math.min(100, 50 + gap * 50));
-            score = Math.round(score * 10.0) / 10.0;
+        List<Double> zoneScores = new ArrayList<>();
+        for (int i=0;i<zones.size();i++) {
+            double gap = demandScores.get(i) - serviceScores.get(i);
+            zoneScores.add(gap);
+        }
+
+        normScores(demandScores);
+        normScores(serviceScores);
+        normScores(zoneScores);
+
+        for (int i=0;i<zones.size();i++) {
+            Double currServiceScore = serviceScores.get(i);
+            Double currDemandScore = demandScores.get(i);
+            double score = currServiceScore - currDemandScore;
+            ZoneInfoResponse z = zones.get(i);
 
             scores.add(new ZoneScoreResponse(z.getZoneId(), z.getName(), score));
+            csvRows.add(new String[]{
+                z.getZoneId(),
+                String.valueOf(z.getCenterLat()),
+                String.valueOf(z.getCenterLng()),
+                String.format("%.4f", currDemandScore),
+                String.format("%.4f", currServiceScore),
+                String.format("%.1f", score)
+            });
         }
+
+        //exportCsv(csvRows);
         return scores;
+    }
+
+    private void normScores(List<Double> rawScores){
+        double max = rawScores.getFirst();
+        for (double d : rawScores){
+            max = Math.max(d,max);
+        }
+        for (int i=0;i<rawScores.size();i++){
+            rawScores.set(i,rawScores.get(i)/max);
+        }
+    }
+
+    // ---- CSV export ----------------------------------------------------
+
+    private void exportCsv(List<String[]> rows) {
+        try {
+            Path logsDir = Paths.get("logs");
+            Files.createDirectories(logsDir);
+            String timestamp = LocalDateTime.now()
+                    .format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+            Path csvPath = logsDir.resolve("zone_scores_" + timestamp + ".csv");
+            try (PrintWriter pw = new PrintWriter(new FileWriter(csvPath.toFile()))) {
+                pw.println("zone_id,center_lat,center_lng,demand,service,score");
+                for (String[] row : rows) {
+                    pw.println(String.join(",", row));
+                }
+            }
+            log.info("Exported zone scores CSV: {}", csvPath.toAbsolutePath());
+        } catch (IOException e) {
+            log.warn("Failed to export zone scores CSV: {}", e.getMessage());
+        }
     }
 
     // ---- active dataset lookup ----------------------------------------
@@ -126,9 +197,17 @@ public class ZoneService {
         for (TypedStop s : stops) {
             double distKm = haversineKm(lat, lng, s.lat, s.lng);
             if (distKm > SERVICE_RADIUS_KM || distKm < 0.01) continue;
-            raw += freqForType(s.routeType) / distKm;
+            raw += normFreq(s.routeType) * distKm;
         }
-        return clamp01(raw / 300.0);
+        return raw;
+    }
+
+    private double normFreq(int routeType) {
+        double max = FREQ_LIST[0];
+        for (double freq : FREQ_LIST){
+            max = Math.max(freq,max);
+        }
+        return freqForType(routeType) / max;
     }
 
     private double freqForType(int routeType) {

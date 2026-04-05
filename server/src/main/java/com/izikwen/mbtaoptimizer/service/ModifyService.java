@@ -36,8 +36,8 @@ public class ModifyService {
 
     @Transactional
     public List<ZoneScoreResponse> modifyStop(ModifyStopRequest request) {
-        TransitStop stop = stopRepository.findById(request.getStopId())
-                .orElseThrow(() -> new ResourceNotFoundException("Stop not found: " + request.getStopId()));
+        TransitStop stop = stopRepository.findByMbtaStopId(request.getMbtaStopId())
+                .orElseThrow(() -> new ResourceNotFoundException("Stop not found: " + request.getMbtaStopId()));
 
         String type = request.getModificationType().toUpperCase();
         switch (type) {
