@@ -1,8 +1,9 @@
 'use client';
 
-import {useEffect, useState} from 'react';
+import {useEffect, useState, useCallback} from 'react';
 import Map from "@/components/Map";
-import type { TransitLine } from '@/types/transit';
+import FareCalculator from "@/components/FareCalculator";
+import type { TransitLine, ZoneInfo, ZoneScore } from '@/types/transit';
 import "./page.css"
 
 function formatTime(minutes: number) {
@@ -15,21 +16,56 @@ function formatTime(minutes: number) {
 
 export default function Home() {
   const [lines, setLines] = useState<TransitLine[]>([]);
+  const [zones, setZones] = useState<ZoneInfo[]>([]);
+  const [zoneScores, setZoneScores] = useState<ZoneScore[]>([]);
+  const [editMode, setEditMode] = useState(false);
   const [timeOfDay, setTimeOfDay] = useState(() => {
     const now = new Date();
     return now.getHours() * 60 + now.getMinutes();
   });
-  const [score, setScore] = useState(0);
 
+  const totalScore = zoneScores.reduce((sum, z) => sum + z.score, 0);
+
+  // Fetch network + zones + scores in parallel
   useEffect(() => {
-    fetch('/api/network?type=0,1,3')
-        .then(response => response.json())
-        .then((data) => {
-          const lines = Array.isArray(data) ? data : data.lines;
-          setLines(lines ?? []);
-          console.log(lines)
-        })
-        .catch(error => console.error('Error fetching network:', error));
+    Promise.all([
+      fetch('/api/network?type=0,1,3').then(r => r.json()),
+      fetch('/api/zones').then(r => r.json()),
+      fetch('/api/zones/scores').then(r => r.json()),
+    ]).then(([netData, zonesData, scoresData]) => {
+      const lines = Array.isArray(netData) ? netData : netData.lines;
+      setLines(lines ?? []);
+      setZones(Array.isArray(zonesData) ? zonesData : []);
+      setZoneScores(Array.isArray(scoresData) ? scoresData : []);
+    })
+    .catch(error => console.error('Error fetching data:', error));
+  }, []);
+
+  // Called after a stop is dragged — re-fetch scores
+  const onStopMoved = useCallback(async (stopId: number, newLat: number, newLng: number) => {
+    try {
+      const res = await fetch('/api/modify-stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stopId,
+          modificationType: 'MOVE',
+          modification: { newLat, newLng },
+        }),
+      });
+      const data = await res.json();
+      // Response contains updated zoneScores
+      const scores = Array.isArray(data) ? data : data.zoneScores;
+      if (scores) setZoneScores(scores);
+
+      // Re-fetch network to reflect new stop position
+      const netRes = await fetch('/api/network?type=0,1,3');
+      const netData = await netRes.json();
+      const updatedLines = Array.isArray(netData) ? netData : netData.lines;
+      setLines(updatedLines ?? []);
+    } catch (error) {
+      console.error('Error moving stop:', error);
+    }
   }, []);
 
   return (
@@ -37,17 +73,28 @@ export default function Home() {
       {/* Simulation Time Display - Top Right */}
       <div id="simTimeDisplay">{formatTime(timeOfDay)}</div>
 
+      {/* Edit Mode Indicator */}
+      {editMode && (
+        <div id="editModeIndicator">EDIT MODE — Drag stops to reposition</div>
+      )}
+
       {/* Main Content - Full screen map */}
       <main className="h-screen">
         <div className="w-full h-full">
-          <Map lines={lines} />
+          <Map
+            lines={lines}
+            zones={zones}
+            zoneScores={zoneScores}
+            editMode={editMode}
+            onStopMoved={onStopMoved}
+          />
         </div>
       </main>
 
       {/* Score Display - Bottom Right */}
       <div id="scoreDisplay">
         <span className="score-label">Score</span>
-        <span className="score-value">{score}</span>
+        <span className="score-value">{totalScore.toFixed(1)}</span>
       </div>
 
       <div id="bottomNavBar">
@@ -72,8 +119,18 @@ export default function Home() {
           </div>
         </div>
         <button>Calculate</button>
-        <button>Edit Stops</button>
-        <button>Heatmap</button>
+        <button
+          className={editMode ? 'active-button' : ''}
+          onClick={() => setEditMode(!editMode)}
+        >
+          {editMode ? 'Done Editing' : 'Edit Map'}
+        </button>
+        <div className="fare-wrapper">
+          <button>Fare Estimate</button>
+          <div className="fare-popup">
+            <FareCalculator />
+          </div>
+        </div>
         <button>More Analysis</button>
       </div>
     </div>

@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import 'leaflet/dist/leaflet.css';
-import type { TransitLine } from '@/types/transit';
+import type { TransitLine, ZoneInfo, ZoneScore } from '@/types/transit';
 
 const MapComponent = dynamic(() => import('./MapClient'), {
   ssr: false,
@@ -11,16 +11,20 @@ const MapComponent = dynamic(() => import('./MapClient'), {
       <p className="text-gray-600 dark:text-gray-400 text-lg">Loading map...</p>
     </div>
   )
-}) as React.ComponentType<{ lines: TransitLine[] }>;
+}) as React.ComponentType<MapProps>;
 
 interface MapProps {
   lines: TransitLine[];
+  zones: ZoneInfo[];
+  zoneScores: ZoneScore[];
+  editMode: boolean;
+  onStopMoved: (stopId: number, newLat: number, newLng: number) => void;
 }
 
-const Map = ({ lines }: MapProps) => {
+const Map = (props: MapProps) => {
   return (
     <div className="w-full h-full">
-      <MapComponent lines={lines} />
+      <MapComponent {...props} />
     </div>
   );
 };

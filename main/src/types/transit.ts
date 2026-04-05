@@ -20,3 +20,20 @@ export interface TransitLine {
   stops: TransitStop[];
   edges: TransitEdge[];
 }
+
+export interface ZoneInfo {
+  zoneId: string;
+  name: string;
+  centerLat: number;
+  centerLng: number;
+  minLat: number;
+  minLng: number;
+  maxLat: number;
+  maxLng: number;
+}
+
+export interface ZoneScore {
+  zoneId: string;
+  zoneName: string;
+  score: number;
+}

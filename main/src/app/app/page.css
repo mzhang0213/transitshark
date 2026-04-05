@@ -82,3 +82,83 @@
 .score-value {
     @apply text-lg font-mono font-bold;
 }
+
+#editModeIndicator {
+    @apply absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-sm font-semibold;
+    z-index: 50;
+    background-color: rgba(220, 50, 50, 0.9);
+    color: white;
+    animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220, 50, 50, 0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(220, 50, 50, 0); }
+}
+
+.fare-wrapper {
+    @apply relative;
+}
+
+.fare-wrapper > button {
+    @apply mx-2 px-9 py-2 text-center rounded-t-md;
+    font-size: 14px;
+    color: black;
+    background-color: lightgray;
+    border: 2px solid black;
+}
+
+.fare-popup {
+    @apply absolute bottom-full left-0 mb-0;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+    pointer-events: none;
+}
+
+.fare-wrapper:hover .fare-popup {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+#bottomNavBar button.active-button {
+    background-color: #dc3232 !important;
+    color: white !important;
+    border-color: #dc3232 !important;
+}
+
+#loadingScreen {
+    @apply flex flex-col items-center justify-center w-full h-full;
+    background-color: #0a0a0a;
+}
+
+.loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 24px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-title {
+    @apply text-2xl font-bold text-white mb-2;
+}
+
+.loading-subtitle {
+    @apply text-sm text-gray-500;
+    animation: pulse-text 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-text {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}

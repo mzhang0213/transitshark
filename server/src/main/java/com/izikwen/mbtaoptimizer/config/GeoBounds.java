@@ -11,8 +11,8 @@ public final class GeoBounds {
     private GeoBounds() {}
 
     public static final double MIN_LAT = 42.23;   // south (Quincy/Milton edge)
-    public static final double MAX_LAT = 42.48;   // north (Medford/Malden edge)
-    public static final double MIN_LNG = -71.19;  // west (Watertown/Newton edge)
+    public static final double MAX_LAT = 42.45;   // north (Medford/Malden edge)
+    public static final double MIN_LNG = -71.18;  // west (Watertown/Newton edge)
     public static final double MAX_LNG = -70.99;  // east (East Boston/harbor)
 
     public static boolean inBounds(double lat, double lng) {

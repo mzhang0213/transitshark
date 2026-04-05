@@ -1,18 +1,22 @@
 # TransitShark Backend
 
-Spring Boot backend for the TransitShark transit network optimization tool.
+Spring Boot backend for the TransitShark transit network optimization tool. Fetches live data from the MBTA API, computes zones from stop locations, and scores them based on synthesized demand vs. transit service coverage.
 
 ## Tech Stack
 - Java 21, Spring Boot 3.3.5
-- PostgreSQL (Supabase)
+- PostgreSQL (Supabase) — stores generated demand datasets
+- MBTA V3 API — live stop, route, and schedule data
 - Spring Data JPA, Hibernate
 - SpringDoc OpenAPI (Swagger UI at `/swagger-ui.html`)
 
 ## Before Running
-Update `src/main/resources/application.yml` with your PostgreSQL/Supabase credentials:
-- `spring.datasource.url`
-- `spring.datasource.username`
-- `spring.datasource.password`
+1. Create a `server/.env` file with your MBTA API key:
+   ```
+   MBTA_API_KEY=your-key-here
+   ```
+   Get a free key at https://api-v3.mbta.com
+
+2. Supabase credentials are in `src/main/resources/application.yml` — update if needed.
 
 ## Run
 ```bash
@@ -22,27 +26,35 @@ Or in IntelliJ: open as Maven project, run `MbtaOptimizerApplication`.
 
 Server starts on port **5777**.
 
+## Geographic Bounds
+All endpoints are clipped to metro Boston (`GeoBounds.java`):
+```
+Lat: 42.23 → 42.45   (Quincy edge → Medford/Malden edge)
+Lng: -71.18 → -70.99  (Watertown/Newton edge → East Boston/harbor)
+```
+Bus routes to Cape Cod, far suburbs, etc. are excluded.
+
 ---
 
 ## API Endpoints
 
 ### GET `/api/heatmap`
-Returns demand aggregated by zone for heatmap display.
+Returns demand aggregated by zone for heatmap display. Uses the active dataset if one is selected, otherwise falls back to synthesized demand.
 
 **Request**
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `timeOfDay` | Integer (query) | 13 | Hour of day (0-23) |
 
-**Response** `200 OK` — `List<ZoneDemand>`
+**Response** `200 OK`
 ```json
 [
   {
-    "zoneId": "Z001",
-    "zoneName": "Downtown Boston",
-    "demand": 82.5,
-    "centerLat": 42.3601,
-    "centerLng": -71.0589
+    "zoneId": "Z-001",
+    "zoneName": "Z-001",
+    "demand": 0.65,
+    "centerLat": 42.35,
+    "centerLng": -71.06
   }
 ]
 ```
@@ -57,7 +69,7 @@ Returns per-stop ridership demand for a given hour.
 |-------|------|---------|-------------|
 | `timeOfDay` | Integer (query) | 13 | Hour of day (0-23) |
 
-**Response** `200 OK` — `List<StopDemand>`
+**Response** `200 OK`
 ```json
 [
   {
@@ -81,7 +93,7 @@ Returns all stops ranked by optimization need (high demand + low connectivity = 
 |-------|------|---------|-------------|
 | `timeOfDay` | Integer (query) | 13 | Hour of day (0-23) |
 
-**Response** `200 OK` — `List<StopDemand>` (sorted descending by demand)
+**Response** `200 OK` — sorted descending by demand
 ```json
 [
   {
@@ -98,22 +110,20 @@ Returns all stops ranked by optimization need (high demand + low connectivity = 
 ---
 
 ### GET `/api/zones`
-Returns all zones with their location coordinates.
+Returns all zones with location coordinates. Zones are computed as a ~2km grid over all in-bounds MBTA stops. Deterministic: same stops produce the same zone IDs every time.
 
-**Request** — none
-
-**Response** `200 OK` — `List<ZoneInfo>`
+**Response** `200 OK`
 ```json
 [
   {
-    "zoneId": "Z001",
-    "name": "Downtown Boston",
-    "centerLat": 42.3601,
-    "centerLng": -71.0589,
-    "minLat": 42.3500,
-    "minLng": -71.0700,
-    "maxLat": 42.3700,
-    "maxLng": -71.0480
+    "zoneId": "Z-001",
+    "name": "Z-001",
+    "centerLat": 42.35,
+    "centerLng": -71.06,
+    "minLat": 42.34,
+    "minLng": -71.07,
+    "maxLat": 42.36,
+    "maxLng": -71.05
   }
 ]
 ```
@@ -121,21 +131,20 @@ Returns all zones with their location coordinates.
 ---
 
 ### GET `/api/zones/scores`
-Calculates and returns a service coverage score (0-100) for every zone.
+Calculates a score (0-100) for every zone. High score = high demand but poor service (needs optimization).
 
-Score factors:
-- Number of active stops in the zone (up to 50 pts)
-- Number of route segments touching the zone (up to 50 pts)
+**Score formula:**
+- **Demand** — from the active dataset (`populationDensity`, `jobDensity`, `carOwnership`) or synthesized from city-center distance
+- **Service** — nearby stops weighted by `frequency / distance` (rail > bus)
+- **Zone score** = `50 + (demand - service) * 50`, clamped to [0, 100]
 
-**Request** — none
-
-**Response** `200 OK` — `List<ZoneScore>`
+**Response** `200 OK`
 ```json
 [
   {
-    "zoneId": "Z001",
-    "zoneName": "Downtown Boston",
-    "score": 72.5
+    "zoneId": "Z-001",
+    "zoneName": "Z-001",
+    "score": 62.5
   }
 ]
 ```
@@ -151,8 +160,8 @@ Modify a stop (move or delete) and get recalculated zone scores.
   "stopId": 1,
   "modificationType": "MOVE",
   "modification": {
-    "newLat": 42.3580,
-    "newLng": -71.0600
+    "newLat": 42.358,
+    "newLng": -71.060
   }
 }
 ```
@@ -164,18 +173,12 @@ Modify a stop (move or delete) and get recalculated zone scores.
 | `modification.newLat` | Double | for MOVE | New latitude |
 | `modification.newLng` | Double | for MOVE | New longitude |
 
-**Response** `200 OK` — `List<ZoneScore>` (recalculated)
-```json
-[
-  { "zoneId": "Z001", "zoneName": "Downtown Boston", "score": 68.0 },
-  { "zoneId": "Z002", "zoneName": "Back Bay", "score": 55.5 }
-]
-```
+**Response** `200 OK` — recalculated `List<ZoneScore>`
 
 ---
 
 ### POST `/api/modify-line`
-Modify a transit line and get recalculated zone scores. The `time` param refers to a 15-minute window starting at the specified hour.
+Modify a transit line and get recalculated zone scores. `time` refers to a 15-minute window starting at the specified hour.
 
 **Request Body**
 ```json
@@ -201,12 +204,11 @@ Modify a transit line and get recalculated zone scores. The `time` param refers 
 | `modification.lng` | Double | optional | Longitude for new stop |
 | `time` | Integer | optional | Hour of day for 15-min window |
 
-**Response** `200 OK` — `ModifyLineResponse`
+**Response** `200 OK`
 ```json
 {
   "zoneScores": [
-    { "zoneId": "Z001", "zoneName": "Downtown Boston", "score": 75.0 },
-    { "zoneId": "Z002", "zoneName": "Back Bay", "score": 60.0 }
+    { "zoneId": "Z-001", "zoneName": "Z-001", "score": 75.0 }
   ],
   "time": 8
 }
@@ -215,19 +217,23 @@ Modify a transit line and get recalculated zone scores. The `time` param refers 
 ---
 
 ### GET `/api/network`
-Returns the full transit network graph: all lines with their stops and edges.
+Returns the transit network from the live MBTA API, clipped to metro Boston bounds.
 
-**Request** — none
+**Request**
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `type` | String (query) | `0,1` | Route type filter. `0`=LightRail, `1`=HeavyRail, `2`=CommuterRail, `3`=Bus, `4`=Ferry |
 
-**Response** `200 OK` — `NetworkResponse`
+**Response** `200 OK`
 ```json
 {
   "lines": [
     {
-      "lineId": 1,
+      "lineId": 2602613,
+      "mbtaRouteId": "Red",
       "lineName": "Red Line",
       "color": "DA291C",
-      "mode": "subway",
+      "mode": "heavy_rail",
       "stops": [
         {
           "stopId": 1,
@@ -235,13 +241,6 @@ Returns the full transit network graph: all lines with their stops and edges.
           "name": "Alewife",
           "lat": 42.3954,
           "lng": -71.1426
-        },
-        {
-          "stopId": 2,
-          "mbtaStopId": "place-davis",
-          "name": "Davis",
-          "lat": 42.3967,
-          "lng": -71.1219
         }
       ],
       "edges": [
@@ -258,9 +257,74 @@ Returns the full transit network graph: all lines with their stops and edges.
 
 ---
 
+### POST `/api/datasets/generate`
+Generate a random demand dataset for all zones and store in Supabase. Per-zone factors follow realistic city distributions (higher density near center, more car ownership in suburbs) with randomness.
+
+**Request**
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `seed` | Long (query) | no | Random seed for reproducibility |
+
+**Response** `200 OK`
+```json
+{
+  "id": 1,
+  "name": "dataset-20260404-183022",
+  "active": false,
+  "createdAt": "2026-04-04T18:30:22Z",
+  "zones": [
+    {
+      "zoneId": "Z-001",
+      "populationDensity": 0.82,
+      "jobDensity": 0.91,
+      "carOwnership": 0.35
+    }
+  ]
+}
+```
+
+---
+
+### GET `/api/datasets`
+List all generated datasets (without zone-level detail).
+
+**Response** `200 OK`
+```json
+[
+  {
+    "id": 1,
+    "name": "dataset-20260404-183022",
+    "active": true,
+    "createdAt": "2026-04-04T18:30:22Z"
+  }
+]
+```
+
+---
+
+### GET `/api/datasets/{id}`
+Get a single dataset with all zone-level data.
+
+**Response** `200 OK` — same shape as generate response.
+
+---
+
+### POST `/api/datasets/{id}/activate`
+Select a dataset as active. Deactivates any previously active dataset. Zone scoring endpoints will use this dataset's demand factors.
+
+**Response** `200 OK` — the activated dataset with zone data.
+
+---
+
+### DELETE `/api/datasets/{id}`
+Delete a dataset and its zone data.
+
+**Response** `204 No Content`
+
+---
+
 ## Error Responses
 
-All errors return a consistent JSON format:
 ```json
 {
   "timestamp": "2026-04-04T12:00:00Z",
@@ -273,5 +337,5 @@ All errors return a consistent JSON format:
 | Status | When |
 |--------|------|
 | `400` | Validation failure or invalid modification type |
-| `404` | Stop, route, or zone not found |
+| `404` | Stop, route, or dataset not found |
 | `500` | Unexpected server error |

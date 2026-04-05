@@ -28,7 +28,8 @@ import java.util.stream.Collectors;
 @Service
 public class ZoneService {
 
-    private static final double CELL_SIZE = 0.02; // ~2km grid
+    private static final double LAT_CELL = 0.004;
+    private static final double LNG_CELL = 0.004;
 
     // --- demand synthesis fallback params ---
     private static final double POP_SIGMA_KM = 6.0;
@@ -140,44 +141,78 @@ public class ZoneService {
         };
     }
 
-    // ---- zone grid computation ----------------------------------------
+    // ---- exclusion zones (water, parks, busy commercial) ----------------
 
+    private static final double[][] EXCLUSIONS = {
+        // Boston Inner Harbor
+        {42.350, -71.045, 42.372, -70.995},
+        // Reserved Channel / South Boston waterfront
+        {42.330, -71.040, 42.348, -71.005},
+        // Fort Point Channel
+        {42.346, -71.055, 42.355, -71.042},
+        // Pleasure Bay / Castle Island water
+        {42.329, -71.020, 42.340, -71.005},
+        // Logan Airport runways / tarmac
+        {42.358, -71.020, 42.378, -70.995},
+    };
+
+    /** Returns true if the center point falls inside any exclusion rectangle. */
+    private static boolean isExcluded(double lat, double lng) {
+        for (double[] ex : EXCLUSIONS) {
+            if (lat >= ex[0] && lat <= ex[2] && lng >= ex[1] && lng <= ex[3]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ---- zone grid computation (brick/offset, full coverage) -----------
+
+    /**
+     * Tiles the entire GeoBounds area with a brick-pattern grid.
+     * Zones are created everywhere EXCEPT exclusion areas (water, parks, commercial).
+     * Stops are NOT required — residential areas far from transit still get zones.
+     */
     private List<ZoneInfoResponse> computeZones(List<TypedStop> stops) {
-        if (stops.isEmpty()) return List.of();
-
-        double minLat = Double.MAX_VALUE, maxLat = -Double.MAX_VALUE;
-        double minLng = Double.MAX_VALUE, maxLng = -Double.MAX_VALUE;
-        for (TypedStop s : stops) {
-            minLat = Math.min(minLat, s.lat);
-            maxLat = Math.max(maxLat, s.lat);
-            minLng = Math.min(minLng, s.lng);
-            maxLng = Math.max(maxLng, s.lng);
-        }
-
-        double originLat = Math.floor(minLat / CELL_SIZE) * CELL_SIZE;
-        double originLng = Math.floor(minLng / CELL_SIZE) * CELL_SIZE;
-        int rows = (int) Math.ceil((maxLat - originLat) / CELL_SIZE) + 1;
-        int cols = (int) Math.ceil((maxLng - originLng) / CELL_SIZE) + 1;
-
-        int[][] counts = new int[rows][cols];
-        for (TypedStop s : stops) {
-            int r = Math.min((int) ((s.lat - originLat) / CELL_SIZE), rows - 1);
-            int c = Math.min((int) ((s.lng - originLng) / CELL_SIZE), cols - 1);
-            counts[r][c]++;
-        }
+        double originLat = Math.floor(GeoBounds.MIN_LAT / LAT_CELL) * LAT_CELL;
+        double originLng = Math.floor(GeoBounds.MIN_LNG / LNG_CELL) * LNG_CELL;
+        int rows = (int) Math.ceil((GeoBounds.MAX_LAT - originLat) / LAT_CELL) + 1;
+        int cols = (int) Math.ceil((GeoBounds.MAX_LNG - originLng) / LNG_CELL) + 2;
 
         List<ZoneInfoResponse> zones = new ArrayList<>();
         int zoneNum = 1;
+
         for (int r = 0; r < rows; r++) {
+            // Even sub-row
             for (int c = 0; c < cols; c++) {
-                if (counts[r][c] < 1) continue;
-                double cMinLat = round6(originLat + r * CELL_SIZE);
-                double cMaxLat = round6(cMinLat + CELL_SIZE);
-                double cMinLng = round6(originLng + c * CELL_SIZE);
-                double cMaxLng = round6(cMinLng + CELL_SIZE);
-                String id = String.format("Z-%03d", zoneNum++);
-                zones.add(new ZoneInfoResponse(id, id,
-                        round6((cMinLat + cMaxLat) / 2), round6((cMinLng + cMaxLng) / 2),
+                double cMinLat = round6(originLat + r * LAT_CELL);
+                double cMaxLat = round6(cMinLat + LAT_CELL);
+                double cMinLng = round6(originLng + c * LNG_CELL);
+                double cMaxLng = round6(cMinLng + LNG_CELL);
+                double cenLat = round6((cMinLat + cMaxLat) / 2);
+                double cenLng = round6((cMinLng + cMaxLng) / 2);
+
+                if (!GeoBounds.inBounds(cenLat, cenLng)) continue;
+                if (isExcluded(cenLat, cenLng)) continue;
+
+                String id = String.format("Z-%04d", zoneNum++);
+                zones.add(new ZoneInfoResponse(id, id, cenLat, cenLng,
+                        cMinLat, cMinLng, cMaxLat, cMaxLng));
+            }
+            // Odd sub-row (offset by half cell in both directions)
+            for (int c = 0; c < cols; c++) {
+                double cMinLat = round6(originLat + r * LAT_CELL + LAT_CELL / 2);
+                double cMaxLat = round6(cMinLat + LAT_CELL);
+                double cMinLng = round6(originLng + c * LNG_CELL + LNG_CELL / 2);
+                double cMaxLng = round6(cMinLng + LNG_CELL);
+                double cenLat = round6((cMinLat + cMaxLat) / 2);
+                double cenLng = round6((cMinLng + cMaxLng) / 2);
+
+                if (!GeoBounds.inBounds(cenLat, cenLng)) continue;
+                if (isExcluded(cenLat, cenLng)) continue;
+
+                String id = String.format("Z-%04d", zoneNum++);
+                zones.add(new ZoneInfoResponse(id, id, cenLat, cenLng,
                         cMinLat, cMinLng, cMaxLat, cMaxLng));
             }
         }

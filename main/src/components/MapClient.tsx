@@ -3,17 +3,21 @@
 import { useState, useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle } from 'react-leaflet';
 import L from 'leaflet';
-import type { TransitLine, TransitStop } from '@/types/transit';
-import FareCalculator from '@/components/FareCalculator';
+import { HeatmapLayer } from 'react-leaflet-heatmap-layer-v3';
+import type { TransitLine, TransitStop, ZoneInfo, ZoneScore } from '@/types/transit';
+
 
 interface MapClientProps {
   lines: TransitLine[];
+  zones: ZoneInfo[];
+  zoneScores: ZoneScore[];
+  editMode: boolean;
+  onStopMoved: (stopId: number, newLat: number, newLng: number) => void;
 }
 
 const createStopIcon = (color: string, mode: string) => {
   const isTrainMode = mode !== 'bus';
   if (isTrainMode) {
-    // Circle for train/rail stops
     return L.icon({
       iconUrl: `data:image/svg+xml;base64,${btoa(`
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">
@@ -26,7 +30,6 @@ const createStopIcon = (color: string, mode: string) => {
       popupAnchor: [0, -10]
     });
   } else {
-    // Square for bus stops
     return L.icon({
       iconUrl: `data:image/svg+xml;base64,${btoa(`
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18">
@@ -88,7 +91,7 @@ const MAP_STYLES = {
 
 const BUS_COLOR = '#e6a5b1';
 
-const MapClient = ({ lines }: MapClientProps) => {
+const MapClient = ({ lines, zones, zoneScores, editMode, onStopMoved }: MapClientProps) => {
   const defaultCenter: [number, number] = [42.3601, -71.0589];
   const [currentStyle, setCurrentStyle] = useState('cartoVoyager');
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
@@ -155,17 +158,15 @@ const MapClient = ({ lines }: MapClientProps) => {
         }
       }
     }
-    // Render bus edges first so train edges draw on top
     return result.sort((a, b) => (a.isBus === b.isBus ? 0 : a.isBus ? -1 : 1));
   }, [lines]);
 
   // Build stop markers: always show train stops, only show bus stops for selected line
   const stopMarkers = useMemo(() => {
     if (!Array.isArray(lines)) return [];
-    const map = new Map<string, { stop: TransitStop; lines: { name: string; color: string; mode: string }[] }>();
+    const map = new Map<string, { stop: TransitStop; lineId: number; lines: { name: string; color: string; mode: string }[] }>();
     for (const line of lines) {
       const isBus = line.mode === 'bus';
-      // Skip bus stops unless this line is selected
       if (isBus && line.lineId !== selectedLineId) continue;
       const lineColor = isBus ? BUS_COLOR : (line.color.startsWith('#') ? line.color : `#${line.color}`);
       for (const stop of line.stops) {
@@ -175,6 +176,7 @@ const MapClient = ({ lines }: MapClientProps) => {
         } else {
           map.set(stop.mbtaStopId, {
             stop,
+            lineId: line.lineId,
             lines: [{ name: line.lineName, color: lineColor, mode: line.mode }],
           });
         }
@@ -183,62 +185,36 @@ const MapClient = ({ lines }: MapClientProps) => {
     return Array.from(map.values());
   }, [lines, selectedLineId]);
 
+  // Build heatmap points from zone scores, normalized 0–1
+  const heatmapPoints = useMemo(() => {
+    if (!zones.length || !zoneScores.length) return [];
+    const scoreMap = new Map<string, number>();
+    for (const zs of zoneScores) {
+      scoreMap.set(zs.zoneId, zs.score);
+    }
+    const raw = zones
+      .filter(z => scoreMap.has(z.zoneId))
+      .map(z => ({
+        lat: z.centerLat,
+        lng: z.centerLng,
+        intensity: scoreMap.get(z.zoneId) || 0,
+      }));
+    const maxVal = Math.max(...raw.map(p => p.intensity), 1);
+    return raw.map(p => ({ ...p, intensity: p.intensity / maxVal }));
+  }, [zones, zoneScores]);
+
+  const isLoaded = Array.isArray(lines) && lines.length > 0;
+
+  if (!isLoaded) {
+    return (
+      <div className="w-full h-full bg-gray-200 dark:bg-gray-800 flex items-center justify-center">
+        <p className="text-gray-600 dark:text-gray-400 text-lg">Loading map...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full h-full">
-      {/* Location Controls */}
-      <div className="absolute top-30 left-4 z-50 bg-white dark:bg-zinc-800 rounded-lg shadow-lg p-3">
-        <div className="space-y-2">
-          <button
-            onClick={getUserLocation}
-            disabled={isLocating}
-            className="w-full py-2 px-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-md text-sm font-medium transition-colors flex items-center justify-center"
-          >
-            {isLocating ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Locating...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-                </svg>
-                My Location
-              </>
-            )}
-          </button>
-          {locationError && (
-            <div className="text-red-600 text-xs p-2 bg-red-50 rounded">{locationError}</div>
-          )}
-          {userLocation && (
-            <div className="text-xs text-gray-600 dark:text-gray-400 p-2 bg-gray-50 dark:bg-zinc-700 rounded">
-              <div>Lat: {userLocation.lat.toFixed(6)}</div>
-              <div>Lng: {userLocation.lng.toFixed(6)}</div>
-              <div>Accuracy: &plusmn;{Math.round(userLocation.accuracy || 0)}m</div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Map Style Selector */}
-      <div className="absolute top-30 right-4 z-50 bg-white dark:bg-zinc-800 rounded-lg shadow-lg p-3">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Map Style
-        </label>
-        <select
-          value={currentStyle}
-          onChange={(e) => setCurrentStyle(e.target.value)}
-          className="w-full p-2 border border-gray-300 dark:border-zinc-600 rounded-md bg-white dark:bg-zinc-700 text-gray-900 dark:text-white text-sm"
-        >
-          {Object.entries(MAP_STYLES).map(([key, style]) => (
-            <option key={key} value={key}>{style.name}</option>
-          ))}
-        </select>
-      </div>
-
       <MapContainer
         center={userLocation ? [userLocation.lat, userLocation.lng] : defaultCenter}
         zoom={userLocation ? 15 : 13}
@@ -249,6 +225,29 @@ const MapClient = ({ lines }: MapClientProps) => {
           url={MAP_STYLES[currentStyle as keyof typeof MAP_STYLES].url}
           attribution={MAP_STYLES[currentStyle as keyof typeof MAP_STYLES].attribution}
         />
+
+        {/* Heatmap layer from zone scores - only in edit mode */}
+        {editMode && heatmapPoints.length > 0 && (
+          <HeatmapLayer
+            points={heatmapPoints}
+            longitudeExtractor={(p: { lng: number }) => p.lng}
+            latitudeExtractor={(p: { lat: number }) => p.lat}
+            intensityExtractor={(p: { intensity: number }) => p.intensity}
+            radius={40}
+            blur={60}
+            max={1}
+            opacity={0.35}
+            gradient={{
+              0.0: '#0000ff',
+              0.2: '#00bfff',
+              0.4: '#00e5a0',
+              0.5: '#00cc00',
+              0.7: '#ffdd00',
+              0.85: '#ff6600',
+              1.0: '#ff0000',
+            }}
+          />
+        )}
 
         {/* User Location */}
         {userLocation && (
@@ -295,6 +294,14 @@ const MapClient = ({ lines }: MapClientProps) => {
               key={`stop-${stop.mbtaStopId}`}
               position={[stop.lat, stop.lng]}
               icon={icon}
+              draggable={editMode}
+              eventHandlers={editMode ? {
+                dragend: (e) => {
+                  const marker = e.target as L.Marker;
+                  const pos = marker.getLatLng();
+                  onStopMoved(stop.stopId, pos.lat, pos.lng);
+                },
+              } : {}}
             >
               <Popup>
                 <div style={{ minWidth: 160 }}>
@@ -333,10 +340,6 @@ const MapClient = ({ lines }: MapClientProps) => {
           );
         })}
       </MapContainer>
-      {/* Fare Calculator - floating bottom-left */}
-      <div className="absolute bottom-6 left-4 z-50">
-        <FareCalculator />
-      </div>
     </div>
   );
 };
