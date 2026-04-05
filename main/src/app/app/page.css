@@ -83,6 +83,22 @@
     @apply text-lg font-mono font-bold;
 }
 
+.score-hint {
+    @apply text-xs text-gray-500 uppercase tracking-wider;
+}
+
+.settings-reset-btn {
+    @apply w-full py-2 px-3 text-xs font-semibold rounded-md cursor-pointer;
+    background-color: #333;
+    color: white;
+    border: 1px solid #555;
+    transition: background-color 0.15s;
+}
+
+.settings-reset-btn:hover {
+    background-color: #555;
+}
+
 #editModeIndicator {
     @apply absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-sm font-semibold;
     z-index: 50;

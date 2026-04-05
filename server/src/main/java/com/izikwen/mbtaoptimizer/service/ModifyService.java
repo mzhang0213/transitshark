@@ -1,6 +1,8 @@
 package com.izikwen.mbtaoptimizer.service;
 
+import com.izikwen.mbtaoptimizer.dto.request.ModifyLineRequest;
 import com.izikwen.mbtaoptimizer.dto.request.ModifyStopRequest;
+import com.izikwen.mbtaoptimizer.dto.response.ModifyLineResponse;
 import com.izikwen.mbtaoptimizer.dto.response.ZoneScoreResponse;
 import org.springframework.stereotype.Service;
 
@@ -42,5 +44,17 @@ public class ModifyService {
         }
 
         return zoneService.getZoneScores();
+    }
+
+    /**
+     * Modify a line's service level and recompute zone scores.
+     * Currently triggers a score recomputation; frequency tracking
+     * can be added to TransitState for more granular control.
+     */
+    public ModifyLineResponse modifyLine(ModifyLineRequest request) {
+        // TODO: track per-line service multiplier in TransitState
+        // For now, just recompute scores from current state
+        List<ZoneScoreResponse> scores = zoneService.getZoneScores();
+        return new ModifyLineResponse(scores, request.getTime());
     }
 }

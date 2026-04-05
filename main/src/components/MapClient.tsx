@@ -13,6 +13,7 @@ interface MapClientProps {
   zoneScores: ZoneScore[];
   editMode: boolean;
   movedStops: Set<string>;
+  scoreVersion: number;
   onStopMoved: (stopId: number, newLat: number, newLng: number, mbtaStopId: string) => void;
   onServiceChanged: (lineId: number, serviceLevel: number) => void;
 }
@@ -101,7 +102,7 @@ interface SelectedLine {
   clickLatLng: [number, number];
 }
 
-const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, onStopMoved, onServiceChanged }: MapClientProps) => {
+const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, scoreVersion, onStopMoved, onServiceChanged }: MapClientProps) => {
   const defaultCenter: [number, number] = [42.3601, -71.0589];
   const [currentStyle, setCurrentStyle] = useState('cartoVoyager');
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
@@ -242,6 +243,7 @@ const MapClient = ({ lines, zones, zoneScores, editMode, movedStops, onStopMoved
         {/* Heatmap layer from zone scores - only in edit mode */}
         {editMode && heatmapPoints.length > 0 && (
           <HeatmapLayer
+            key={`heatmap-${scoreVersion}`}
             points={heatmapPoints}
             longitudeExtractor={(p: { lng: number }) => p.lng}
             latitudeExtractor={(p: { lat: number }) => p.lat}

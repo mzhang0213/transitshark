@@ -268,7 +268,7 @@ public class TransitState {
         for (ZoneScore zs : zones) map.put(zs.zoneId, zs);
         this.latestScores = Map.copyOf(map);
 
-        exportCsv(snap);
+//        exportCsv(snap);
         return snap;
     }
 

@@ -26,6 +26,29 @@ export default function Home() {
   });
 
   const totalScore = zoneScores.reduce((sum, z) => sum + z.score, 0);
+  const [scoreVersion, setScoreVersion] = useState(0);
+
+  // Reset lines to original MBTA positions
+  const resetLines = useCallback(async () => {
+    try {
+      // Tell backend to refresh from MBTA API
+      await fetch('/api/state/refresh', { method: 'POST' });
+      // Re-fetch everything
+      const [netData, zonesData, scoresData] = await Promise.all([
+        fetch('/api/network?type=0,1,3').then(r => r.json()),
+        fetch('/api/zones').then(r => r.json()),
+        fetch('/api/zones/scores').then(r => r.json()),
+      ]);
+      const lines = Array.isArray(netData) ? netData : netData.lines;
+      setLines(lines ?? []);
+      setZones(Array.isArray(zonesData) ? zonesData : []);
+      setZoneScores(Array.isArray(scoresData) ? scoresData : []);
+      setMovedStops(new Set());
+      setScoreVersion(v => v + 1);
+    } catch (error) {
+      console.error('Error resetting lines:', error);
+    }
+  }, []);
 
   // Fetch network + zones + scores in parallel
   useEffect(() => {
@@ -68,6 +91,7 @@ export default function Home() {
       const scores = await res.json();
       if (Array.isArray(scores)) {
         setZoneScores(scores);
+        setScoreVersion(v => v + 1);
       }
     } catch (error) {
       console.error('Error moving stop:', error);
@@ -92,6 +116,7 @@ export default function Home() {
       const scores = data.zoneScores;
       if (Array.isArray(scores)) {
         setZoneScores(scores);
+        setScoreVersion(v => v + 1);
       }
     } catch (error) {
       console.error('Error changing service:', error);
@@ -117,6 +142,7 @@ export default function Home() {
             zoneScores={zoneScores}
             editMode={editMode}
             movedStops={movedStops}
+            scoreVersion={scoreVersion}
             onStopMoved={onStopMoved}
             onServiceChanged={onServiceChanged}
           />
@@ -126,7 +152,8 @@ export default function Home() {
       {/* Score Display - Bottom Right */}
       <div id="scoreDisplay">
         <span className="score-label">Score</span>
-        <span className="score-value">{totalScore.toFixed(1)}</span>
+        <span className="score-value">{Math.abs(totalScore).toFixed(1)}</span>
+        {/*<span className="score-hint">{totalScore > 0 ? 'oversupplied' : totalScore < 0 ? 'underserved' : 'balanced'}</span>*/}
       </div>
 
       <div id="bottomNavBar">
@@ -147,6 +174,14 @@ export default function Home() {
                 className="settings-slider"
               />
               <div className="settings-time-display">{formatTime(timeOfDay)}</div>
+            </div>
+            <div className="settings-section" style={{ marginTop: 12 }}>
+              <button
+                onClick={resetLines}
+                className="settings-reset-btn"
+              >
+                Reset to Default MBTA Lines
+              </button>
             </div>
           </div>
         </div>
