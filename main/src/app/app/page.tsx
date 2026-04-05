@@ -42,12 +42,11 @@ export default function Home() {
     .catch(error => console.error('Error fetching data:', error));
   }, []);
 
-  // Called after a stop is dragged — optimistically update edges, then call API
+  // Called after a stop is dragged
   const onStopMoved = useCallback(async (_stopId: number, newLat: number, newLng: number, mbtaStopId: string) => {
-    // Track this stop as moved
     setMovedStops(prev => new Set(prev).add(mbtaStopId));
 
-    // Optimistic update: move the stop in local state so edges redraw immediately
+    // Optimistic update for instant edge redraw
     setLines(prev => prev.map(line => ({
       ...line,
       stops: line.stops.map(stop =>
@@ -56,6 +55,7 @@ export default function Home() {
     })));
 
     try {
+      // Tell backend to update its in-memory state and recompute scores
       const res = await fetch('/api/modify-stop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,11 +65,9 @@ export default function Home() {
           modification: { newLat, newLng },
         }),
       });
-      const data = await res.json();
-      const scores = Array.isArray(data) ? data : data.zoneScores;
-      if (scores) {
+      const scores = await res.json();
+      if (Array.isArray(scores)) {
         setZoneScores(scores);
-        console.log("zone scores updated");
       }
     } catch (error) {
       console.error('Error moving stop:', error);
@@ -78,8 +76,6 @@ export default function Home() {
 
   // Called when service level is changed on a line
   const onServiceChanged = useCallback(async (lineId: number, serviceLevel: number) => {
-    // serviceLevel: -5 to +5 relative to baseline (0)
-    // Each unit = one INCR_SERVICE or DECR_SERVICE call worth 1 minute
     const modificationType = serviceLevel >= 0 ? 'INCR_SERVICE' : 'DECR_SERVICE';
     try {
       const res = await fetch('/api/modify-line', {
@@ -96,7 +92,6 @@ export default function Home() {
       const scores = data.zoneScores;
       if (Array.isArray(scores)) {
         setZoneScores(scores);
-        console.log("zone scores updated")
       }
     } catch (error) {
       console.error('Error changing service:', error);
